@@ -4,3 +4,4 @@ transformers
 torchaudio
 soundfile
 SpeechRecognition
+requests
