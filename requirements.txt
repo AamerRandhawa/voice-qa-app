@@ -1,8 +1,5 @@
 streamlit
-torch
 transformers
-TTS
-pydub
-groq
-SpeechRecognition
+torch
+torchaudio
 openai-whisper
