@@ -2,8 +2,7 @@ streamlit
 openai-whisper
 torch
 torchaudio
-transformers
 pydub
+ffmpeg-python
 TTS
 SpeechRecognition
-ffmpeg-python
