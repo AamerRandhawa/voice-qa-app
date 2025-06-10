@@ -1,0 +1,8 @@
+streamlit
+torch
+transformers
+TTS
+pydub
+groq
+SpeechRecognition
+openai-whisper
