@@ -1,7 +1,9 @@
 streamlit
 openai-whisper
-transformers
+torch
 torchaudio
-soundfile
+transformers
+pydub
+TTS
 SpeechRecognition
-requests
+ffmpeg-python
