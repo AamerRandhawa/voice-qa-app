@@ -1,4 +1,5 @@
 import streamlit as st
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 import os
 import tempfile
 import speech_recognition as sr
