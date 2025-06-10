@@ -1,64 +1,72 @@
 import streamlit as st
-GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
-import os
+import whisper
+import requests
+import torchaudio
+import soundfile as sf
+import io
 import tempfile
-import speech_recognition as sr
-import torch
-from groq import Groq
-from TTS.api import TTS
-from pydub import AudioSegment
 
-client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+st.set_page_config(page_title="Voice Q&A App", page_icon="🔊")
+st.title("🔊 Voice-based Question Answering App")
 
-st.set_page_config(page_title="Voice Q&A App", layout="centered")
-st.title("🎤 Voice Q&A with Groq + TTS")
+st.markdown("""
+Upload a voice recording (.wav or .m4a), and this app will:
+1. Transcribe your question using Whisper
+2. Generate an answer using the Groq API (LLaMA 3)
+3. Convert the response back to speech
+""")
 
-uploaded_audio = st.file_uploader("Upload your question (WAV or M4A format)", type=["wav", "m4a"], key="uploader")
-user_text = None
+uploaded_file = st.file_uploader("Upload your voice question (.wav or .m4a)", type=["wav", "m4a"])
 
-if uploaded_audio:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=f".{uploaded_audio.name.split('.')[-1]}") as f:
-        f.write(uploaded_audio.read())
-        audio_path = f.name
+if uploaded_file is not None:
+    if uploaded_file.name.endswith((".wav", ".m4a")):
+        with st.spinner("Transcribing with Whisper..."):
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
+                tmp_file.write(uploaded_file.read())
+                tmp_file_path = tmp_file.name
 
-    if uploaded_audio.name.endswith(".m4a"):
-        wav_path = audio_path.replace(".m4a", ".wav")
-        sound = AudioSegment.from_file(audio_path)
-        sound.export(wav_path, format="wav")
-        audio_path = wav_path
+            model = whisper.load_model("base")
+            result = model.transcribe(tmp_file_path)
+            question = result["text"]
 
-    recognizer = sr.Recognizer()
-    with sr.AudioFile(audio_path) as source:
-        audio_data = recognizer.record(source)
-        try:
-            user_text = recognizer.recognize_whisper(audio_data, model="base")
-            st.success(f"Recognized Text: {user_text}")
-        except Exception as e:
-            st.error(f"Speech recognition failed: {e}")
+        st.markdown("**Transcribed Question:**")
+        st.success(question)
 
-if user_text:
-    st.header("Response from Groq AI")
-    with st.spinner("Generating response..."):
-        try:
-            chat_completion = client.chat.completions.create(
-                messages=[{"role": "user", "content": user_text}],
-                model="llama-3-70b-8192"
+        # Groq API call
+        with st.spinner("Generating answer via Groq..."):
+            response = requests.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer YOUR_GROQ_API_KEY",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "llama3-8b-8192",
+                    "messages": [
+                        {"role": "user", "content": question}
+                    ],
+                    "temperature": 0.7,
+                    "max_tokens": 500
+                }
             )
-            answer = chat_completion.choices[0].message.content
-            st.success("Answer:")
-            st.write(answer)
 
-            st.header("Listen to the Answer")
+            answer = response.json()["choices"][0]["message"]["content"]
+            st.markdown("**Answer:**")
+            st.info(answer)
 
-            @st.cache_resource
-            def load_tts():
-                return TTS(model_name="tts_models/en/ljspeech/tacotron2-DDC", progress_bar=False, gpu=torch.cuda.is_available())
+        # Text to speech using TTS model (you can replace this part with your preferred model or method)
+        with st.spinner("Converting answer to speech..."):
+            from transformers import pipeline
+            tts = pipeline("text-to-speech", model="espnet/kan-bayashi_ljspeech_vits")
+            tts_output = tts(answer)
 
-            tts = load_tts()
-            tts_file_path = tempfile.mktemp(suffix=".wav")
-            tts.tts_to_file(text=answer, file_path=tts_file_path)
+            audio_array = tts_output["waveform"].numpy()
+            sample_rate = tts_output["sampling_rate"]
 
-            with open(tts_file_path, "rb") as audio_file:
-                st.audio(audio_file.read(), format="audio/wav")
-        except Exception as e:
-            st.error(f"Groq API Error: {e}")
+            # Save to buffer
+            audio_buffer = io.BytesIO()
+            sf.write(audio_buffer, audio_array.T, sample_rate, format="WAV")
+            st.audio(audio_buffer.getvalue(), format="audio/wav")
+
+    else:
+        st.warning("Please upload a .wav or .m4a file.")
