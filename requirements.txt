@@ -1,5 +1,6 @@
 streamlit
+whisper
 transformers
-torch
 torchaudio
-openai-whisper
+soundfile
+SpeechRecognition
